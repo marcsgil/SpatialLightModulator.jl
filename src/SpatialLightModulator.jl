@@ -2,7 +2,7 @@ module SpatialLightModulator
 
 using GLMakie, GLMakie.GLFW
 
-export SLM, update_hologram!
+export SLM, update_hologram
 
 struct SLM
     monitor::GLFW.Monitor
@@ -29,7 +29,7 @@ function SLM(monitor_id=length(GLFW.GetMonitors()))
     SLM(monitor, screen, height, width, framerate, fig, ax, hm)
 end
 
-update_hologram!(slm::SLM, hologram::AbstractMatrix{UInt8}) = slm.hm[3][] = hologram
+update_hologram(slm::SLM, hologram::AbstractMatrix{UInt8}) = slm.hm[3][] = hologram
 Base.close(slm::SLM) = GLMakie.destroy!(slm.screen)
 
 end
