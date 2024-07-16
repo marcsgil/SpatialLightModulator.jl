@@ -29,7 +29,11 @@ function SLM(monitor_id=length(GLFW.GetMonitors()))
     SLM(monitor, screen, height, width, framerate, fig, ax, hm)
 end
 
-update_hologram(slm::SLM, hologram::AbstractMatrix{UInt8}) = slm.hm[3][] = hologram
+function update_hologram(slm::SLM, hologram::AbstractMatrix{UInt8}; sleep_time=0.15)
+    slm.hm[3][] = hologram
+    sleep(sleep_time)
+end
+
 Base.close(slm::SLM) = GLMakie.destroy!(slm.screen)
 
 end
