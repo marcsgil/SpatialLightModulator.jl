@@ -1,6 +1,7 @@
 module SpatialLightModulator
 
 using GLMakie, GLMakie.GLFW
+using Roots, Interpolations, Bessels
 
 export SLM, update_hologram
 export centralized_indices, all_centralized_indces, centralized_cut
