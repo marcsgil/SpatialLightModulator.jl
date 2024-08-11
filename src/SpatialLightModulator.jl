@@ -3,7 +3,7 @@ module SpatialLightModulator
 using GLMakie, GLMakie.GLFW
 using Roots, Interpolations, Bessels
 
-export SLM, update_hologram
+export SLM, update_hologram, close
 export centralized_indices, all_centralized_indces, centralized_cut
 
 function centralized_indices(x, cut_size, ax=1)
@@ -56,5 +56,7 @@ function update_hologram(slm::SLM, hologram::AbstractMatrix{UInt8}; sleep_time=0
 end
 
 Base.close(slm::SLM) = GLMakie.destroy!(slm.screen)
+
+include("precompile.jl")
 
 end
