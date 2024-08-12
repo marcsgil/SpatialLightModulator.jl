@@ -6,6 +6,8 @@ import GLFW.GetMonitors, GLFW.GetPrimaryMonitor
 export SLM, update_hologram!, close
 export GetMonitors, GetPrimaryMonitor
 
+global is_there_an_open_slm = false
+
 """
     SLM(monitor=GLFW.GetMonitors()[end])
 
@@ -86,7 +88,10 @@ function create_shader(shader_type, source)
     return shader
 end
 
-function SLM(monitor=GLFW.GetMonitors()[end])
+function SLM(monitor=GLFW.GetMonitors()[end]) 
+    @assert !is_there_an_open_slm "There is already an open SLM"
+    global is_there_an_open_slm = true
+
     # Initialize GLFW
     GLFW.Init()
     GLFW.WindowHint(GLFW.CONTEXT_VERSION_MAJOR, 3)
@@ -144,16 +149,15 @@ function SLM(monitor=GLFW.GetMonitors()[end])
     texture = Ref{GLuint}()
     glGenTextures(1, texture)
     glBindTexture(GL_TEXTURE_2D, texture[])
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
 
 
     # Create a grayscale image
     width, height = mode.width, mode.height
     image = zeros(UInt8, width, height)
     slm = SLM(image, width, height, monitor, window, mode, shader_program, vao, vbo, ebo, texture, true)
+
+    glViewport(0, 0, mode.width, mode.height)
 
     update_hologram!(slm)
     slm
@@ -205,7 +209,7 @@ end
 Update the hologram display. If `image` is provided, update the display with that image. Otherwise, update the display with `slm.image`.
 """
 function update_hologram!(slm, image; sleep_time=0.15)
-    copy!(centralized_cut(slm.image, size(image)), image)
+    copy!(slm.image, image)
     update_hologram!(slm; sleep_time)
 end
 
@@ -221,8 +225,9 @@ function Base.close(slm::SLM)
     glDeleteBuffers(1, slm.ebo)
     glDeleteTextures(1, slm.texture)
     GLFW.DestroyWindow(slm.window)
-    nothing
     slm.isopen = false
+    global is_there_an_open_slm = false
+    nothing
 end
 
 include("precompile.jl")
