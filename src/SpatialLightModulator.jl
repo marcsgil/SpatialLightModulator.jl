@@ -1,15 +1,12 @@
 module SpatialLightModulator
 
 using ModernGL, GLFW
-import GLFW.GetMonitors, GLFW.GetPrimaryMonitor
-
 export SLM, update_hologram!, close
-export GetMonitors, GetPrimaryMonitor
 
 global is_there_an_open_slm = false
 
 """
-    SLM(monitor=GLFW.GetMonitors()[end])
+    SLM(monitor_number=length(GetMonitors()))
 
 A struct representing a Spatial Light Modulator (SLM).
 
@@ -88,7 +85,7 @@ function create_shader(shader_type, source)
     return shader
 end
 
-function SLM(monitor=GLFW.GetMonitors()[end]) 
+function SLM(monitor_id=length(GLFW.GetMonitors())) 
     @assert !is_there_an_open_slm "There is already an open SLM"
     global is_there_an_open_slm = true
 
@@ -99,6 +96,7 @@ function SLM(monitor=GLFW.GetMonitors()[end])
     GLFW.WindowHint(GLFW.OPENGL_PROFILE, GLFW.OPENGL_CORE_PROFILE)
 
     # Create a fullscreen window
+    monitor = GLFW.GetMonitors()[monitor_id]
     mode = GLFW.GetVideoMode(monitor)
     window = GLFW.CreateWindow(mode.width, mode.height, "SLM")
     GLFW.SetWindowMonitor(window, monitor, 0, 0, mode.width, mode.height, mode.refreshrate)
@@ -209,7 +207,7 @@ end
 Update the hologram display. If `image` is provided, update the display with that image. Otherwise, update the display with `slm.image`.
 """
 function update_hologram!(slm, image; sleep_time=0.15)
-    copy!(slm.image, image)
+    copy!(centralized_cut(slm.image, size(image)), image)
     update_hologram!(slm; sleep_time)
 end
 
