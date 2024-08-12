@@ -36,6 +36,7 @@ mutable struct SLM
     vbo::Ref{GLuint}
     ebo::Ref{GLuint}
     texture::Ref{GLuint}
+    isopen::Bool
 end
 
 Base.show(io::IO, slm::SLM) = print(io, "SLM @ $(slm.monitor)")
@@ -152,7 +153,7 @@ function SLM(monitor=GLFW.GetMonitors()[end])
     # Create a grayscale image
     width, height = mode.width, mode.height
     image = zeros(UInt8, width, height)
-    slm = SLM(image, width, height, monitor, window, mode, shader_program, vao, vbo, ebo, texture)
+    slm = SLM(image, width, height, monitor, window, mode, shader_program, vao, vbo, ebo, texture, true)
 
     update_hologram!(slm)
     slm
@@ -175,11 +176,27 @@ function render_frame(slm::SLM; sleep_time=0.15)
     GLFW.SwapBuffers(slm.window)
     GLFW.PollEvents()
     Base.Libc.systemsleep(sleep_time)
+    nothing
 end
 
 function update_hologram!(slm; sleep_time=0.15)
+    @assert slm.isopen "SLM is closed"
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, slm.width, slm.height, 0, GL_RED, GL_UNSIGNED_BYTE, slm.image')
     render_frame(slm; sleep_time)
+end
+
+function centralized_indices(x, cut_size, ax=1)
+    L = size(x, ax)
+    center = L ÷ 2
+    max(1, center - cut_size ÷ 2 + 1):min(L, center + cut_size ÷ 2)
+end
+
+function all_centralized_indces(x, cut_size)
+    (centralized_indices(x, cut_size[n], n) for n ∈ 1:ndims(x))
+end
+
+function centralized_cut(x, cut_size)
+    view(x, all_centralized_indces(x, cut_size)...)
 end
 
 """
@@ -188,7 +205,7 @@ end
 Update the hologram display. If `image` is provided, update the display with that image. Otherwise, update the display with `slm.image`.
 """
 function update_hologram!(slm, image; sleep_time=0.15)
-    copy!(slm.image, image)
+    copy!(centralized_cut(slm.image, size(image)), image)
     update_hologram!(slm; sleep_time)
 end
 
@@ -205,6 +222,7 @@ function Base.close(slm::SLM)
     glDeleteTextures(1, slm.texture)
     GLFW.DestroyWindow(slm.window)
     nothing
+    slm.isopen = false
 end
 
 include("precompile.jl")
