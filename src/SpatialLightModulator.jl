@@ -1,61 +1,211 @@
 module SpatialLightModulator
 
-using GLMakie, GLMakie.GLFW
-using Roots, Interpolations, Bessels
+using ModernGL, GLFW
+import GLFW.GetMonitors, GLFW.GetPrimaryMonitor
 
-export SLM, update_hologram, close
-export centralized_indices, all_centralized_indces, centralized_cut
+export SLM, update_hologram!, close
+export GetMonitors, GetPrimaryMonitor
 
-function centralized_indices(x, cut_size, ax=1)
-    L = size(x, ax)
-    center = L ÷ 2
-    max(1, center - cut_size ÷ 2 + 1):min(L, center + cut_size ÷ 2)
-end
+"""
+    SLM(monitor=GLFW.GetMonitors()[end])
 
-function all_centralized_indces(x, cut_size)
-    (centralized_indices(x, cut_size[n], n) for n ∈ 1:ndims(x))
-end
+A struct representing a Spatial Light Modulator (SLM).
 
-function centralized_cut(x, cut_size)
-    view(x, all_centralized_indces(x, cut_size)...)
-end
-
+# Fields
+- `image::Array{UInt8,2}`: The grayscale image to be displayed
+- `width::Int`: Width of the image/display
+- `height::Int`: Height of the image/display
+- `monitor::GLFW.Monitor`: The monitor on which to display
+- `window::GLFW.Window`: The GLFW window object
+- `mode::GLFW.VidMode`: Video mode of the monitor
+- `shader_program::GLuint`: OpenGL shader program ID
+- `vao::Ref{GLuint}`: Vertex Array Object
+- `vbo::Ref{GLuint}`: Vertex Buffer Object
+- `ebo::Ref{GLuint}`: Element Buffer Object
+- `texture::Ref{GLuint}`: Texture object for the image
+"""
 mutable struct SLM
-    monitor::GLFW.Monitor
-    screen::GLMakie.Screen
-    height::Int
+    image::Array{UInt8,2}
     width::Int
-    framerate::Int
-    hologram::Matrix{UInt8}
-    fig::Figure
-    ax::Axis
-    hm::Heatmap{Tuple{Vector{Float32},Vector{Float32},Matrix{Float32}}}
+    height::Int
+    monitor::GLFW.Monitor
+    window::GLFW.Window
+    mode::GLFW.VidMode
+    shader_program::GLuint
+    vao::Ref{GLuint}
+    vbo::Ref{GLuint}
+    ebo::Ref{GLuint}
+    texture::Ref{GLuint}
 end
 
-function SLM(monitor_id=length(GLFW.GetMonitors()))
-    GLMakie.activate!()
-    monitor = GLFW.GetMonitors()[monitor_id]
-    video_mode = GLFW.GetVideoMode(monitor)
-    width, height = video_mode.width, video_mode.height
-    framerate = video_mode.refreshrate
-    fig = Figure(size=(width, height), figure_padding=0)
-    ax = Axis(fig[1, 1], aspect=DataAspect())
-    hidedecorations!(ax)
-    hologram = zeros(UInt8, width, height)
-    hm = heatmap!(ax, hologram, colormap=:greys, colorrange=(0, 255))
-    screen = display(fig; decorated=false, focus_on_show=true, monitor, framerate)
-    SLM(monitor, screen, height, width, framerate, hologram, fig, ax, hm)
+Base.show(io::IO, slm::SLM) = print(io, "SLM @ $(slm.monitor)")
+
+# Vertex shader source code
+vertex_shader_source = """
+#version 330 core
+layout (location = 0) in vec2 aPos;
+layout (location = 1) in vec2 aTexCoord;
+out vec2 TexCoord;
+void main()
+{
+    gl_Position = vec4(aPos.x, aPos.y, 0.0, 1.0);
+    TexCoord = aTexCoord;
+}
+"""
+
+# Fragment shader source code
+fragment_shader_source = """
+#version 330 core
+in vec2 TexCoord;
+out vec4 FragColor;
+uniform sampler2D ourTexture;
+void main()
+{
+    float color = texture(ourTexture, TexCoord).r;
+    FragColor = vec4(color, color, color, 1.0);
+}
+"""
+
+"""
+    create_shader(shader_type, source)
+
+Create and compile an OpenGL shader.
+
+# Arguments
+- `shader_type`: The type of shader (e.g., GL_VERTEX_SHADER or GL_FRAGMENT_SHADER)
+- `source`: The shader source code as a string
+
+# Returns
+- The compiled shader object
+"""
+function create_shader(shader_type, source)
+    shader = glCreateShader(shader_type)
+    glShaderSource(shader, 1, [source], C_NULL)
+    glCompileShader(shader)
+    return shader
 end
 
-function update_hologram(slm::SLM, hologram::AbstractMatrix{UInt8}; sleep_time=0.15)
-    indices = all_centralized_indces(slm.hologram, size(hologram))
-    slm.hologram[indices...] = hologram
-    slm.hm[3][] .= slm.hologram
-    notify(slm.hm[3])
-    sleep(sleep_time)
+function SLM(monitor=GLFW.GetMonitors()[end])
+    # Initialize GLFW
+    GLFW.Init()
+    GLFW.WindowHint(GLFW.CONTEXT_VERSION_MAJOR, 3)
+    GLFW.WindowHint(GLFW.CONTEXT_VERSION_MINOR, 3)
+    GLFW.WindowHint(GLFW.OPENGL_PROFILE, GLFW.OPENGL_CORE_PROFILE)
+
+    # Create a fullscreen window
+    mode = GLFW.GetVideoMode(monitor)
+    window = GLFW.CreateWindow(mode.width, mode.height, "SLM")
+    GLFW.SetWindowMonitor(window, monitor, 0, 0, mode.width, mode.height, mode.refreshrate)
+    GLFW.MakeContextCurrent(window)
+
+    # Create and compile shaders
+    vertex_shader = create_shader(GL_VERTEX_SHADER, vertex_shader_source)
+    fragment_shader = create_shader(GL_FRAGMENT_SHADER, fragment_shader_source)
+
+    # Create shader program
+    shader_program = glCreateProgram()
+    glAttachShader(shader_program, vertex_shader)
+    glAttachShader(shader_program, fragment_shader)
+    glLinkProgram(shader_program)
+
+    # Set up vertex data
+    vertices = Float32[
+        -1.0, -1.0, 0.0, 0.0,
+        1.0, -1.0, 1.0, 0.0,
+        1.0, 1.0, 1.0, 1.0,
+        -1.0, 1.0, 0.0, 1.0
+    ]
+
+    indices = UInt32[0, 1, 2, 2, 3, 0]
+
+    # Create VAO, VBO, and EBO
+    vao = Ref{GLuint}()
+    glGenVertexArrays(1, vao)
+    glBindVertexArray(vao[])
+
+    vbo = Ref{GLuint}()
+    glGenBuffers(1, vbo)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo[])
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW)
+
+    ebo = Ref{GLuint}()
+    glGenBuffers(1, ebo)
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo[])
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW)
+
+    # Set vertex attribute pointers
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(Float32), C_NULL)
+    glEnableVertexAttribArray(0)
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(Float32), Ptr{Cvoid}(2 * sizeof(Float32)))
+    glEnableVertexAttribArray(1)
+
+    # Create texture
+    texture = Ref{GLuint}()
+    glGenTextures(1, texture)
+    glBindTexture(GL_TEXTURE_2D, texture[])
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+
+
+    # Create a grayscale image
+    width, height = mode.width, mode.height
+    image = zeros(UInt8, width, height)
+    slm = SLM(image, width, height, monitor, window, mode, shader_program, vao, vbo, ebo, texture)
+
+    update_hologram!(slm)
+    slm
 end
 
-Base.close(slm::SLM) = GLMakie.destroy!(slm.screen)
+"""
+    render_frame(slm::SLM; sleep_time=0.15)
+
+Render a single frame for the SLM, using slm.image, and wait for `sleep_time` seconds.
+"""
+function render_frame(slm::SLM; sleep_time=0.15)
+    glClearColor(0.0, 0.0, 0.0, 1.0)
+    glClear(GL_COLOR_BUFFER_BIT)
+
+    glUseProgram(slm.shader_program)
+    glBindVertexArray(slm.vao[])
+    glBindTexture(GL_TEXTURE_2D, slm.texture[])
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, C_NULL)
+
+    GLFW.SwapBuffers(slm.window)
+    GLFW.PollEvents()
+    Base.Libc.systemsleep(sleep_time)
+end
+
+function update_hologram!(slm; sleep_time=0.15)
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, slm.width, slm.height, 0, GL_RED, GL_UNSIGNED_BYTE, slm.image')
+    render_frame(slm; sleep_time)
+end
+
+"""
+    update_hologram!(slm::SLM[, image]; sleep_time=0.15)
+
+Update the hologram display. If `image` is provided, update the display with that image. Otherwise, update the display with `slm.image`.
+"""
+function update_hologram!(slm, image; sleep_time=0.15)
+    copy!(slm.image, image)
+    update_hologram!(slm; sleep_time)
+end
+
+"""
+    close(slm::SLM)
+
+Close the SLM window and clean up resources.
+"""
+function Base.close(slm::SLM)
+    GLFW.SetWindowShouldClose(slm.window, true)
+    glDeleteVertexArrays(1, slm.vao)
+    glDeleteBuffers(1, slm.vbo)
+    glDeleteBuffers(1, slm.ebo)
+    glDeleteTextures(1, slm.texture)
+    GLFW.DestroyWindow(slm.window)
+    nothing
+end
 
 include("precompile.jl")
 
