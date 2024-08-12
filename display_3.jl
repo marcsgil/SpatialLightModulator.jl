@@ -1,5 +1,20 @@
-using ModernGL
-using GLFW
+using ModernGL, GLFW
+
+mutable struct SLM
+    image::Array{UInt8,2}
+    width::Int
+    height::Int
+    monitor::GLFW.Monitor
+    window::GLFW.Window
+    mode::GLFW.VidMode
+    shader_program::GLuint
+    vao::Ref{GLuint}
+    vbo::Ref{GLuint}
+    ebo::Ref{GLuint}
+    texture::Ref{GLuint}
+end
+
+Base.show(io::IO, slm::SLM) = print(io, "SLM @ $(slm.monitor)")
 
 # Vertex shader source code
 vertex_shader_source = """
@@ -34,13 +49,6 @@ function create_shader(shader_type, source)
     return shader
 end
 
-mutable struct SLM
-    image::Array{UInt8,2}
-    window::GLFW.Window
-    mode::GLFW.VidMode
-    shader_program::GLuint
-end
-
 function SLM(monitor=GLFW.GetMonitors()[end])
     # Initialize GLFW
     GLFW.Init()
@@ -63,10 +71,6 @@ function SLM(monitor=GLFW.GetMonitors()[end])
     glAttachShader(shader_program, vertex_shader)
     glAttachShader(shader_program, fragment_shader)
     glLinkProgram(shader_program)
-
-    # Create a grayscale image
-    img_width, img_height = mode.width, mode.height
-    img = rand(UInt8, img_height, img_width)
 
     # Set up vertex data
     vertices = Float32[
@@ -107,37 +111,65 @@ function SLM(monitor=GLFW.GetMonitors()[end])
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, img_width, img_height, 0, GL_RED, GL_UNSIGNED_BYTE, img)
 
-    main_loop = Threads.@spawn begin
-        # Main rendering loop
-        while !GLFW.WindowShouldClose(window)
-            glClearColor(0.0, 0.0, 0.0, 1.0)
-            glClear(GL_COLOR_BUFFER_BIT)
 
-            glUseProgram(shader_program)
-            glBindVertexArray(vao[])
-            glBindTexture(GL_TEXTURE_2D, texture[])
-            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, C_NULL)
+    # Create a grayscale image
+    width, height = mode.width, mode.height
+    image = zeros(UInt8, width, height)
+    slm = SLM(image, width, height, monitor, window, mode, shader_program, vao, vbo, ebo, texture)
 
-            GLFW.SwapBuffers(window)
-            GLFW.PollEvents()
-        end
+    update_image!(slm)
+    slm
+end
 
-        # Clean up
-        glDeleteVertexArrays(1, vao)
-        glDeleteBuffers(1, vbo)
-        glDeleteBuffers(1, ebo)
-        glDeleteTextures(1, texture)
-        GLFW.DestroyWindow(window)
-        GLFW.Terminate()
-    end
+function update_frame(slm::SLM)
+    glClearColor(0.0, 0.0, 0.0, 1.0)
+    glClear(GL_COLOR_BUFFER_BIT)
 
-    return SLM(img, window, mode, shader_program), main_loop
+    glUseProgram(slm.shader_program)
+    glBindVertexArray(slm.vao[])
+    glBindTexture(GL_TEXTURE_2D, slm.texture[])
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, C_NULL)
+
+    GLFW.SwapBuffers(slm.window)
+    GLFW.PollEvents()
+end
+
+function update_image(slm)
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, slm.width, slm.height, 0, GL_RED, GL_UNSIGNED_BYTE, slm.image')
+    update_frame(slm)
+end
+
+function update_image!(slm, image)
+    copy!(slm.image, image)
+    update_image(slm)
+end
+
+function close(slm::SLM)
+    GLFW.SetWindowShouldClose(slm.window, true)
+    glDeleteVertexArrays(1, slm.vao)
+    glDeleteBuffers(1, slm.vbo)
+    glDeleteBuffers(1, slm.ebo)
+    glDeleteTextures(1, slm.texture)
+    GLFW.DestroyWindow(slm.window)
 end
 ##
 # Run the program
-slm, main_loop= SLM()
+slm = SLM()
 
-fetch(main_loop)
+for n ∈ 1:100
+    #holo = rand(UInt8, slm.width, slm.height)
+    #update_image(slm, holo)
+    holo = rand(UInt8, slm.width, slm.height)
+    copy!(slm.image, holo)
+    update_image(slm)
+    sleep(0.1)
+end
 
+update_image(slm, fill(UInt8(100), slm.width, slm.height))
+
+
+
+
+
+close(slm)
