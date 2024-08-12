@@ -2,6 +2,7 @@ module SpatialLightModulator
 
 using ModernGL, GLFW
 export SLM, update_hologram!, close
+export centralized_indices, all_centralized_indces, centralized_cut
 
 global is_there_an_open_slm = false
 
