@@ -112,6 +112,7 @@ Update the hologram displayed on the SLM.
 
 `data` is a 2D matrix of UInt8 values representing the hologram.
 The size of `data` must match the size of the SLM window.
+Sleep for `sleep_time` seconds after updating the hologram. This is useful to give the SLM time to update the hologram.
 """
 function update_hologram(slm::SLM, data::AbstractMatrix{UInt8}; sleep_time=0.15)
     @assert size(data) == (slm.width, slm.height) "Data size does not match SLM size"
