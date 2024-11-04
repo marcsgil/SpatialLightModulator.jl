@@ -143,10 +143,15 @@ function Base.close(slm::SLM)
     end
     GLFW.SetWindowShouldClose(slm.window, true)
     GLFW.DestroyWindow(slm.window)
-    glDeleteVertexArrays(1, slm.vao)
-    glDeleteBuffers(1, slm.vbo)
-    glDeleteBuffers(1, slm.ebo)
-    glDeleteTextures(1, slm.texture)
+    try
+        glDeleteVertexArrays(1, slm.vao)
+        glDeleteBuffers(1, slm.vbo)
+        glDeleteBuffers(1, slm.ebo)
+        glDeleteTextures(1, slm.texture)
+    catch e
+        @warn "Trying to delete buffers led to the following error:"
+        println(e)
+    end
     pop!(open_windows, slm.monitor_id)
     nothing
 end
