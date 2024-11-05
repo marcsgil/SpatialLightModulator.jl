@@ -3,13 +3,12 @@ module SpatialLightModulator
 using ModernGL, GLFW
 using GLFW: GetMonitors
 include("utils.jl")
-export main, SLM, update_hologram, GetMonitors
+export main, SLMDisplay, updateArray, GetMonitors
 
-global open_windows = Set{Int}()
+global open_monitors = Set{Int}()
 
-struct SLM
-    monitor_id::Int
-    monitor::GLFW.Monitor
+struct SLMDisplay
+    monitor::Int
     window::GLFW.Window
     width::Int
     height::Int
@@ -21,23 +20,23 @@ struct SLM
     texture::Ref{GLuint}
 end
 
-Base.show(io::IO, slm::SLM) = print(io, "SLM @ $(slm.monitor)")
+Base.show(io::IO, slm::SLMDisplay) = print(io, "SLM @ $(GLFW.GetMonitors()[slm.monitor])")
 
 """
-    SLM(monitor_id::Int=lastindex(GetMonitors()))
+    SLMDisplay(monitor::Int=lastindex(GetMonitors()))
 
 Create a new Spatial Light Modulator (SLM) window.
 
-`monitor_id` is the index of the monitor to use. By default, the last monitor is used.
+`monitor` is the index of the monitor to use. By default, the last monitor is used.
 To get the list of available monitors, use `GetMonitors()`, which is re-exported from GLFW.jl.
 """
-function SLM(monitor_id::Int=lastindex(GLFW.GetMonitors()))
-    if monitor_id in open_windows
-        error("Monitor $monitor_id is already in use")
+function SLMDisplay(monitor::Int=lastindex(GLFW.GetMonitors()))
+    if monitor in open_monitors
+        error("Monitor $monitor is already in use")
     end
 
-    monitor, window, width, height, refreshrate = init_fullscreen(monitor_id)
-    push!(open_windows, monitor_id)
+    glfw_monitor, window, width, height, refreshrate = init_fullscreen(monitor)
+    push!(open_monitors, monitor)
 
     srcVertexShader = """
     #version 330 core
@@ -100,21 +99,21 @@ function SLM(monitor_id::Int=lastindex(GLFW.GetMonitors()))
     texture = create_texture()
     glUseProgram(shaderProgram)
 
-    slm = SLM(monitor_id, monitor, window, width, height, refreshrate, shaderProgram, vao, vbo, ebo, texture)
-    update_hologram(slm, zeros(UInt8, width, height))
+    slm = SLMDisplay(monitor, window, width, height, refreshrate, shaderProgram, vao, vbo, ebo, texture)
+    updateArray(slm, zeros(UInt8, width, height))
     slm
 end
 
 """
-    update_hologram(slm::SLM, data::AbstractMatrix{UInt8}; sleep_time=0.15)
+    updateArray(slm::SLM, data::AbstractMatrix{UInt8}; sleep=0.15)
 
-Update the hologram displayed on the SLM.
+Update the array displayed on the SLM.
 
 `data` is a 2D matrix of UInt8 values representing the hologram.
 The size of `data` must match the size of the SLM window.
-Sleep for `sleep_time` seconds after updating the hologram. This is useful to give the SLM time to update the hologram.
+Sleep for `sleep` seconds after updating the hologram. This is useful to give the SLM time to update the hologram.
 """
-function update_hologram(slm::SLM, data::AbstractMatrix{UInt8}; sleep_time=0.15)
+function updateArray(slm::SLMDisplay, data::AbstractMatrix{UInt8}; sleep=0.15)
     @assert size(data) == (slm.width, slm.height) "Data size does not match SLM size"
 
     if GLFW.WindowShouldClose(slm.window)
@@ -128,7 +127,7 @@ function update_hologram(slm::SLM, data::AbstractMatrix{UInt8}; sleep_time=0.15)
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, C_NULL)
     GLFW.SwapBuffers(slm.window)
     GLFW.PollEvents()
-    Base.Libc.systemsleep(sleep_time)
+    Base.Libc.systemsleep(sleep)
     nothing
 end
 
@@ -137,7 +136,7 @@ end
 
 Close the SLM window.
 """
-function Base.close(slm::SLM)
+function Base.close(slm::SLMDisplay)
     if GLFW.WindowShouldClose(slm.window)
         error("The SLM window has already been closed")
     end
@@ -152,7 +151,7 @@ function Base.close(slm::SLM)
         @warn "Trying to delete buffers led to the following error:"
         println(e)
     end
-    pop!(open_windows, slm.monitor_id)
+    pop!(open_monitors, slm.monitor)
     nothing
 end
 
