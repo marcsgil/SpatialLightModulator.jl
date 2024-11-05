@@ -4,12 +4,10 @@ This project provides a Julia package for controlling a spatial light modulator 
 
 ## Installation
 
-To install the package, clone the repository and use Julia's package manager to add it to your environment:
+The package is in the General Registry, so you can install it by hitting `]` in a Julia REPL to enter the PKG mode and then typing
 
-```sh
-git clone https://github.com/yourusername/SpatialLightModulator.git
-cd SpatialLightModulator
-julia -e 'using Pkg; Pkg.add(PackageSpec(path=pwd()))'
+```
+add SpatialLightModulator
 ```
 
 ## Usage
@@ -20,13 +18,13 @@ Here's a basic example of how to use the `SpatialLightModulator` package:
 using SpatialLightModulator
 
 # Create an SLM instance for the last monitor
-slm = SLM()
+slm = SLMDisplay()
 
 # Generate random hologram data
 holo = rand(UInt8, slm.width, slm.height)
 
 # Update the hologram displayed on the SLM
-update_hologram(slm, holo)
+updateArray(slm, holo)
 
 # Close the SLM window
 close(slm)
@@ -36,27 +34,27 @@ For the calculation of holograms used to produce structured light modes, conside
 
 ## Documentation
 
-### `SLM`
-    SLM(monitor_id::Int=lastindex(GetMonitors()))
+### `SLMDisplay`
+    SLMDisplay(monitor::Int=lastindex(GetMonitors()))
 
 Create a new Spatial Light Modulator (SLM) window.
-`monitor_id` is the index of the monitor to use. By default, the last monitor is used.
+
+`monitor` is the index of the monitor to use. By default, the last monitor is used.
 To get the list of available monitors, use `GetMonitors()`, which is re-exported from GLFW.jl.
 
 
-### `update_hologram`
+### `updateArray`
+    updateArray(slm::SLMDisplay, data::AbstractMatrix{UInt8}; sleep=0.15)
 
-    update_hologram(slm::SLM, data::AbstractMatrix{UInt8}; sleep_time=0.15)
-    
+Update the array displayed on the SLM.
 
-Update the hologram displayed on the SLM.
-`data` is a 2D matrix of `UInt8` values representing the hologram.
+`data` is a 2D matrix of UInt8 values representing the hologram.
 The size of `data` must match the size of the SLM window.
-Sleep for `sleep_time` seconds after updating the hologram. This is useful to give the SLM time to update the hologram.
+Sleep for `sleep` seconds after updating the hologram. This is useful to give the SLM time to update the hologram.
 
 ### `close`
 
-    close(slm::SLM)
+    close(slm::SLMDisplay)
 
 Close the SLM window.
 

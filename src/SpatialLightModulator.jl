@@ -105,7 +105,7 @@ function SLMDisplay(monitor::Int=lastindex(GLFW.GetMonitors()))
 end
 
 """
-    updateArray(slm::SLM, data::AbstractMatrix{UInt8}; sleep=0.15)
+    updateArray(slm::SLMDisplay, data::AbstractMatrix{UInt8}; sleep=0.15)
 
 Update the array displayed on the SLM.
 
@@ -132,7 +132,7 @@ function updateArray(slm::SLMDisplay, data::AbstractMatrix{UInt8}; sleep=0.15)
 end
 
 """
-    close(slm::SLM)
+    close(slm::SLMDisplay)
 
 Close the SLM window.
 """
